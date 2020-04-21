@@ -1,0 +1,341 @@
+node_modules
+package-lock.json 
+ 16  README.md 
+@@ -0,0 +1,16 @@
+# Node.js Rest APIs with Express & MySQL example
+
+For more detail, please visit:
+> [Build Node.js Rest APIs with Express & MySQL](https://bezkoder.com/node-js-rest-api-express-mysql/)
+> [Deploying/Hosting Node.js app on Heroku with MySQL database](https://bezkoder.com/deploy-node-js-app-heroku-cleardb-mysql/)
+## Project setup
+```
+npm install
+```
+
+### Run
+```
+node server.js
+```
+ 6  app/config/db.config.js 
+@@ -0,0 +1,6 @@
+module.exports = {
+  HOST: "us-cdbr-iron-east-02.cleardb.net",
+  USER: "b7e24378878xxx",
+  PASSWORD: "0200exxx",
+  DB: "heroku_7643ec736354xxx"
+};
+ 116  app/controllers/customer.controller.js 
+@@ -0,0 +1,116 @@
+const Customer = require("../models/customer.model.js");
+
+// Create and Save a new Customer
+exports.create = (req, res) => {
+  // Validate request
+  if (!req.body) {
+    res.status(400).send({
+      message: "Content can not be empty!"
+    });
+  }
+
+  // Create a Customer
+  const customer = new Customer({
+    email: req.body.email,
+    name: req.body.name,
+    active: req.body.active
+  });
+
+  // Save Customer in the database
+  Customer.create(customer, (err, data) => {
+    if (err)
+      res.status(500).send({
+        message:
+          err.message || "Some error occurred while creating the Customer."
+      });
+    else res.send(data);
+  });
+};
+
+// Retrieve all Customers from the database.
+exports.findAll = (req, res) => {
+  Customer.getAll((err, data) => {
+    if (err)
+      res.status(500).send({
+        message:
+          err.message || "Some error occurred while retrieving customers."
+      });
+    else res.send(data);
+  });
+};
+
+// Find a single Customer with a customerId
+exports.findOne = (req, res) => {
+  Customer.findById(req.params.customerId, (err, data) => {
+    if (err) {
+      if (err.kind === "not_found") {
+        res.status(404).send({
+          message: `Not found Customer with id ${req.params.customerId}.`
+        });
+      } else {
+        res.status(500).send({
+          message: "Error retrieving Customer with id " + req.params.customerId
+        });
+      }
+    } else res.send(data);
+  });
+};
+
+// Update a Customer identified by the customerId in the request
+exports.update = (req, res) => {
+  // Validate Request
+  if (!req.body) {
+    res.status(400).send({
+      message: "Content can not be empty!"
+    });
+  }
+
+  console.log(req.body);
+
+  Customer.updateById(
+    req.params.customerId,
+    new Customer(req.body),
+    (err, data) => {
+      if (err) {
+        if (err.kind === "not_found") {
+          res.status(404).send({
+            message: `Not found Customer with id ${req.params.customerId}.`
+          });
+        } else {
+          res.status(500).send({
+            message: "Error updating Customer with id " + req.params.customerId
+          });
+        }
+      } else res.send(data);
+    }
+  );
+};
+
+// Delete a Customer with the specified customerId in the request
+exports.delete = (req, res) => {
+  Customer.remove(req.params.customerId, (err, data) => {
+    if (err) {
+      if (err.kind === "not_found") {
+        res.status(404).send({
+          message: `Not found Customer with id ${req.params.customerId}.`
+        });
+      } else {
+        res.status(500).send({
+          message: "Could not delete Customer with id " + req.params.customerId
+        });
+      }
+    } else res.send({ message: `Customer was deleted successfully!` });
+  });
+};
+
+// Delete all Customers from the database.
+exports.deleteAll = (req, res) => {
+  Customer.removeAll((err, data) => {
+    if (err)
+      res.status(500).send({
+        message:
+          err.message || "Some error occurred while removing all customers."
+      });
+    else res.send({ message: `All Customers were deleted successfully!` });
+  });
+};
+ 110  app/models/customer.model.js 
+@@ -0,0 +1,110 @@
+const sql = require("./db.js");
+
+// constructor
+const Customer = function(customer) {
+  this.email = customer.email;
+  this.name = customer.name;
+  this.active = customer.active;
+};
+
+Customer.create = (newCustomer, result) => {
+  sql.query("INSERT INTO customers SET ?", newCustomer, (err, res) => {
+    if (err) {
+      console.log("error: ", err);
+      result(err, null);
+      return;
+    }
+
+    console.log("created customer: ", { id: res.insertId, ...newCustomer });
+    result(null, { id: res.insertId, ...newCustomer });
+  });
+};
+
+Customer.findById = (customerId, result) => {
+  sql.query(`SELECT * FROM customers WHERE id = ${customerId}`, (err, res) => {
+    if (err) {
+      console.log("error: ", err);
+      result(err, null);
+      return;
+    }
+
+    if (res.length) {
+      console.log("found customer: ", res[0]);
+      result(null, res[0]);
+      return;
+    }
+
+    // not found Customer with the id
+    result({ kind: "not_found" }, null);
+  });
+};
+
+Customer.getAll = result => {
+  sql.query("SELECT * FROM customers", (err, res) => {
+    if (err) {
+      console.log("error: ", err);
+      result(null, err);
+      return;
+    }
+
+    console.log("customers: ", res);
+    result(null, res);
+  });
+};
+
+Customer.updateById = (id, customer, result) => {
+  sql.query(
+    "UPDATE customers SET email = ?, name = ?, active = ? WHERE id = ?",
+    [customer.email, customer.name, customer.active, id],
+    (err, res) => {
+      if (err) {
+        console.log("error: ", err);
+        result(null, err);
+        return;
+      }
+
+      if (res.affectedRows == 0) {
+        // not found Customer with the id
+        result({ kind: "not_found" }, null);
+        return;
+      }
+
+      console.log("updated customer: ", { id: id, ...customer });
+      result(null, { id: id, ...customer });
+    }
+  );
+};
+
+Customer.remove = (id, result) => {
+  sql.query("DELETE FROM customers WHERE id = ?", id, (err, res) => {
+    if (err) {
+      console.log("error: ", err);
+      result(null, err);
+      return;
+    }
+
+    if (res.affectedRows == 0) {
+      // not found Customer with the id
+      result({ kind: "not_found" }, null);
+      return;
+    }
+
+    console.log("deleted customer with id: ", id);
+    result(null, res);
+  });
+};
+
+Customer.removeAll = result => {
+  sql.query("DELETE FROM customers", (err, res) => {
+    if (err) {
+      console.log("error: ", err);
+      result(null, err);
+      return;
+    }
+
+    console.log(`deleted ${res.affectedRows} customers`);
+    result(null, res);
+  });
+};
+
+module.exports = Customer;
+ 11  app/models/db.js 
+@@ -0,0 +1,11 @@
+const mysql = require("mysql");
+const dbConfig = require("../config/db.config.js");
+
+var connection = mysql.createPool({
+  host: dbConfig.HOST,
+  user: dbConfig.USER,
+  password: dbConfig.PASSWORD,
+  database: dbConfig.DB
+});
+
+module.exports = connection;
+ 21  app/routes/customer.routes.js 
+@@ -0,0 +1,21 @@
+module.exports = app => {
+  const customers = require("../controllers/customer.controller.js");
+
+  // Create a new Customer
+  app.post("/customers", customers.create);
+
+  // Retrieve all Customers
+  app.get("/customers", customers.findAll);
+
+  // Retrieve a single Customer with customerId
+  app.get("/customers/:customerId", customers.findOne);
+
+  // Update a Customer with customerId
+  app.put("/customers/:customerId", customers.update);
+
+  // Delete a Customer with customerId
+  app.delete("/customers/:customerId", customers.delete);
+
+  // Create a new Customer
+  app.delete("/customers", customers.deleteAll);
+};
+ 22  package.json 
+@@ -0,0 +1,22 @@
+{
+  "name": "nodejs-express-mysql",
+  "version": "1.0.0",
+  "description": "Node.js Restful CRUD API with Node.js, Express and MySQL",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "nodejs",
+    "express",
+    "mysql",
+    "restapi"
+  ],
+  "author": "bezkoder",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.19.0",
+    "express": "^4.17.1",
+    "mysql": "^2.17.1"
+  }
+}
+ 23  server.js 
+@@ -0,0 +1,23 @@
+const express = require("express");
+const bodyParser = require("body-parser");
+
+const app = express();
+
+// parse requests of content-type - application/json
+app.use(bodyParser.json());
+
+// parse requests of content-type - application/x-www-form-urlencoded
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// simple route
+app.get("/", (req, res) => {
+  res.json({ message: "Welcome to bezkoder application." });
+});
+
+require("./app/routes/customer.routes.js")(app);
+
+// set port, listen for requests
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}.`);
+});
